@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { engineVersion, isTauri, updateEngine } from "@/lib/native";
 import { Moon, Sun, Monitor, RefreshCw, Check, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -37,8 +38,18 @@ export function SettingsDialog({ open, onOpenChange, t, s, set }: { open: boolea
   const [busy, setBusy] = useState(false);
   const [ver, setVer] = useState("2026.09.14");
 
+  useEffect(() => { if (open) engineVersion().then((v) => v && setVer(v)).catch(() => {}); }, [open]);
+
   const update = () => {
     setBusy(true);
+    if (isTauri()) {
+      updateEngine()
+        .then((out) => { toast.success(t.upToDate, { description: out.trim().split("\n").pop() }); return engineVersion(); })
+        .then((v) => v && setVer(v))
+        .catch((e) => toast.error(String(e)))
+        .finally(() => setBusy(false));
+      return;
+    }
     setTimeout(() => { setBusy(false); setVer("2026.09.28"); toast.success(t.upToDate, { description: "yt-dlp 2026.09.28 · ffmpeg 7.1 · ffprobe 7.1" }); }, 1800);
   };
 

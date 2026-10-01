@@ -8,10 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AUDIO_Q, CATALOG, VIDEO_Q, fmtDur, thumb, type Format, type Quality, type AudioQ, type VideoQ } from "./data";
 import type { Dict } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { fetchMetadata, isTauri } from "@/lib/native";
+import { toast } from "sonner";
 
 export interface Draft {
   key: string; ytId: string; title: string; duration: number;
   format: Format; quality: Quality; selected: boolean;
+  url: string; thumb?: string | undefined;
 }
 
 interface Props {
@@ -38,11 +41,20 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
     if (!url.trim()) return;
     setLoading(true);
     setDrafts([]);
+    if (isTauri()) {
+      fetchMetadata(url.trim()).then((m) => {
+        if (!m) return;
+        setIsList(m.isPlaylist);
+        setDrafts(m.entries.map((e, i) => ({ key: `${e.id}-${i}`, ytId: e.id, title: e.title, duration: e.duration, url: e.url, thumb: e.thumbnail,
+          format: defFormat, quality: defQ(defFormat), selected: true })));
+      }).catch((e) => toast.error(String(e))).finally(() => setLoading(false));
+      return;
+    }
     setTimeout(() => {
       const list = /[?&]list=/.test(url);
       const mk = (i: number): Draft => {
         const c = CATALOG[i % CATALOG.length]!;
-        return { key: `${c.ytId}-${i}`, ytId: c.ytId, title: c.title, duration: c.duration, format: defFormat, quality: defQ(defFormat), selected: true };
+        return { key: `${c.ytId}-${i}`, ytId: c.ytId, title: c.title, duration: c.duration, url: `https://www.youtube.com/watch?v=${c.ytId}`, format: defFormat, quality: defQ(defFormat), selected: true };
       };
       if (list) {
         const start = hash(url) % CATALOG.length;
@@ -106,7 +118,7 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
                   <div key={d.key} className={cn("flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 transition-opacity", !d.selected && "opacity-50")}>
                     {isList && <Checkbox checked={d.selected} onCheckedChange={(v) => patch(d.key, { selected: !!v })} />}
                     <div className="relative shrink-0">
-                      <img src={thumb(d.ytId)} alt="" className={cn("h-14 rounded-md object-cover", isList ? "w-24" : "w-32 h-[72px]")} />
+                      <img src={d.thumb ?? thumb(d.ytId)} alt="" className={cn("h-14 rounded-md object-cover", isList ? "w-24" : "w-32 h-[72px]")} />
                       <span dir="ltr" className="absolute bottom-1 end-1 rounded bg-foreground/80 px-1 text-[10px] text-background">{fmtDur(d.duration)}</span>
                     </div>
                     <div className="min-w-0 flex-1">

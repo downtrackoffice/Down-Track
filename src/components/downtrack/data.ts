@@ -18,6 +18,9 @@ export interface Node {
   op?: PendingOp | undefined;
   originalName?: string | undefined;
   progress?: number | undefined;
+  url?: string | undefined;
+  thumbUrl?: string | undefined;
+  real?: boolean | undefined;
 }
 
 export const AUDIO_Q: AudioQ[] = ["128k", "192k", "320k"];

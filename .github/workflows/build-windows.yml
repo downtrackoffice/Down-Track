@@ -1,0 +1,83 @@
+name: Build DownTrack for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publish the installer as a GitHub Release"
+        type: boolean
+        default: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Download latest yt-dlp, ffmpeg and ffprobe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $triple = "x86_64-pc-windows-msvc"
+          $bin = "src-tauri/binaries"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+
+          Invoke-WebRequest "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "$bin/yt-dlp-$triple.exe"
+
+          Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_tmp -Force
+          $dir = Get-ChildItem ffmpeg_tmp -Directory | Select-Object -First 1
+          Copy-Item "$($dir.FullName)/bin/ffmpeg.exe"  "$bin/ffmpeg-$triple.exe"
+          Copy-Item "$($dir.FullName)/bin/ffprobe.exe" "$bin/ffprobe-$triple.exe"
+
+          Get-ChildItem $bin | Format-Table Name, Length
+          & "$bin/yt-dlp-$triple.exe" --version
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Generate app icons
+        run: bunx tauri icon src-tauri/app-icon.png
+
+      - name: Build installer (and publish release)
+        if: github.event_name == 'push' || inputs.publish_release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: bunx tauri
+          tagName: v__VERSION__
+          releaseName: "DownTrack v__VERSION__"
+          releaseBody: "Download the `.exe` (recommended) or `.msi` below, run it, and DownTrack is ready."
+          releaseDraft: false
+          prerelease: false
+
+      - name: Build installer (artifact only)
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish_release
+        run: bunx tauri build
+
+      - name: Upload installers as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DownTrack-Windows-Installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
