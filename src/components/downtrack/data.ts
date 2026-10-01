@@ -58,7 +58,7 @@ export const CATALOG: { ytId: string; title: string; duration: number }[] = [
 ];
 
 const media = (parentId: string, i: number, kind: Format, quality: Quality): Node => {
-  const c = CATALOG[i];
+  const c = CATALOG[i]!;
   return {
     id: uid(), parentId, name: `${c.title}.${kind}`, kind, ytId: c.ytId,
     duration: c.duration, quality, size: estSize(c.duration, quality), status: "saved",

@@ -17,7 +17,7 @@ export interface Draft {
 interface Props {
   open: boolean; onOpenChange: (o: boolean) => void; t: Dict;
   defFormat: Format; defAudio: AudioQ; defVideo: VideoQ;
-  folders: { id: string; path: string }[]; defaultFolder?: string;
+  folders: { id: string; path: string }[]; defaultFolder?: string | undefined;
   onAdd: (items: Draft[], folderId: string) => void;
 }
 
@@ -41,7 +41,7 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
     setTimeout(() => {
       const list = /[?&]list=/.test(url);
       const mk = (i: number): Draft => {
-        const c = CATALOG[i % CATALOG.length];
+        const c = CATALOG[i % CATALOG.length]!;
         return { key: `${c.ytId}-${i}`, ytId: c.ytId, title: c.title, duration: c.duration, format: defFormat, quality: defQ(defFormat), selected: true };
       };
       if (list) {

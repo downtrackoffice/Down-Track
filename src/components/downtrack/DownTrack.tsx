@@ -40,7 +40,7 @@ export function DownTrack() {
   const [saving, setSaving] = useState(false);
   const t = getDict(settings.lang);
   const rtl = isRtl(settings.lang);
-  const current = history[hIdx];
+  const current = history[hIdx] ?? null;
 
   // settings persistence (app preferences only)
   useEffect(() => {
