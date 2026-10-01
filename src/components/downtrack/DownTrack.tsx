@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils";
 import { estSize, fmtDur, fmtSize, seed, thumb, uid, type Node } from "./data";
 import { AddMediaDialog, type Draft } from "./AddMediaDialog";
 import { SettingsDialog, type Settings } from "./SettingsDialog";
+import {
+  isTauri, hasFsAccess, pickFolder, scan, diskPath, sanitize, windowAction,
+  mkdir as nativeMkdir, remove as nativeRemove, rename as nativeRename, download as nativeDownload,
+  type RootRef, type ScanEntry,
+} from "@/lib/native";
 
 const DEFAULT_SETTINGS: Settings = { theme: "system", format: "mp3", audio: "320k", video: "1080p", lang: "he" };
 
@@ -38,6 +43,8 @@ export function DownTrack() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [folderDlg, setFolderDlg] = useState<{ parent: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [realBusy, setRealBusy] = useState(false);
+  const rootsRef = useRef(new Map<string, RootRef>());
   const t = getDict(settings.lang);
   const rtl = isRtl(settings.lang);
   const current = history[hIdx] ?? null;
@@ -88,7 +95,7 @@ export function DownTrack() {
   // ---------- staging operations ----------
   const addMedia = (drafts: Draft[], folderId: string) => {
     const created: Node[] = drafts.map((d) => ({
-      id: uid(), parentId: folderId, name: `${d.title}.${d.format}`, kind: d.format, ytId: d.ytId,
+      id: uid(), parentId: folderId, name: `${d.title}.${d.format}`, kind: d.format, ytId: d.ytId, url: d.url, thumbUrl: d.thumb,
       duration: d.duration, quality: d.quality, size: estSize(d.duration, d.quality), status: "pending", op: "add",
     }));
     setNodes((ns) => [...ns, ...created]);
@@ -142,37 +149,137 @@ export function DownTrack() {
     toast(t.discarded);
   };
 
-  const saveAll = () => {
+  // ---------- disk-backed folders (Tauri path or browser directory handle) ----------
+  const rootRefOf = (n: Node, map: Map<string, Node>): { ref: RootRef; root: Node } | null => {
+    let cur: Node | undefined = n;
+    while (cur?.parentId) cur = map.get(cur.parentId);
+    const ref = cur ? rootsRef.current.get(cur.id) : undefined;
+    return cur && ref ? { ref, root: cur } : null;
+  };
+  /** Names below the root folder; `original` uses pre-rename names of ancestors. */
+  const partsOf = (n: Node, map: Map<string, Node>, original: boolean) => {
+    const out: string[] = [];
+    let cur: Node | undefined = n;
+    while (cur?.parentId) { out.unshift(original ? cur.originalName ?? cur.name : cur.name); cur = map.get(cur.parentId); }
+    return out;
+  };
+
+  const addRoot = async () => {
+    if (!isTauri() && !hasFsAccess()) { setFolderDlg({ parent: null }); return; }
+    const picked = await pickFolder();
+    if (!picked) return;
+    const id = uid();
+    rootsRef.current.set(id, picked.ref);
+    const created: Node[] = [{ id, parentId: null, name: picked.name, kind: "folder", status: "saved" }];
+    let entries: ScanEntry[] = [];
+    try { entries = await scan(picked.ref); } catch (e) { toast.error(String(e)); }
+    const idByPath = new Map<string, string>([["", id]]);
+    for (const e of entries) {
+      const pid = idByPath.get(e.parts.join("/"));
+      if (!pid) continue;
+      const nid = uid();
+      if (e.isDir) {
+        idByPath.set([...e.parts, e.name].join("/"), nid);
+        created.push({ id: nid, parentId: pid, name: e.name, kind: "folder", status: "saved" });
+      } else {
+        created.push({ id: nid, parentId: pid, name: e.name, kind: /\.mp4$/i.test(e.name) ? "mp4" : "mp3", size: e.size, status: "saved" });
+      }
+    }
+    setNodes((ns) => [...ns, ...created]);
+    navigate(id);
+  };
+
+  const finish = (id: string, patch: Partial<Node> = {}) =>
+    setNodes((ns) => ns.map((x) => (x.id === id ? { ...x, status: "saved", op: undefined, originalName: undefined, progress: undefined, real: undefined, ...patch } : x)));
+
+  const saveAll = async () => {
     if (!pending.length) return;
     setSaving(true);
+    const map = new Map(nodes.map((n) => [n.id, n]));
+    const tauri = isTauri();
+    // Items executed for real on disk; everything else uses the in-app simulation.
+    const asyncOps = pending.filter((n) => {
+      const r = rootRefOf(n, map);
+      if (!r) return false;
+      if (n.op === "add" && n.kind !== "folder") return tauri && !!r.ref.path && !!n.url;
+      return true;
+    });
+    const asyncIds = new Set(asyncOps.map((n) => n.id));
     setNodes((ns) => {
       const drop = new Set<string>();
-      ns.filter((n) => n.op === "delete").forEach((n) => descendants(ns, n.id).forEach((d) => drop.add(d)));
+      ns.filter((n) => n.op === "delete" && !asyncIds.has(n.id)).forEach((n) => descendants(ns, n.id).forEach((d) => drop.add(d)));
       return ns.filter((n) => !drop.has(n.id)).map((n) => {
         if (n.status !== "pending") return n;
+        if (asyncIds.has(n.id)) return n.op === "add" && n.kind !== "folder" ? { ...n, status: "downloading", progress: 0, real: true } : n;
         if (n.op === "add" && n.kind !== "folder") return { ...n, status: "downloading", progress: 0 };
         return { ...n, status: "saved", op: undefined, originalName: undefined };
       });
     });
+    if (!asyncOps.length) return;
+
+    setRealBusy(true);
+    const fail = (n: Node, e: unknown) => toast.error(`${n.name}: ${e instanceof Error ? e.message : String(e)}`);
+    const depth = (n: Node) => partsOf(n, map, false).length;
+
+    for (const n of asyncOps.filter((x) => x.op === "delete")) {
+      const r = rootRefOf(n, map)!;
+      try {
+        await nativeRemove(r.ref, partsOf(n, map, true));
+        setNodes((ns) => { const d = descendants(ns, n.id); return ns.filter((x) => !d.has(x.id)); });
+      } catch (e) { fail(n, e); }
+    }
+    for (const n of asyncOps.filter((x) => x.op === "rename").sort((a, b) => depth(b) - depth(a))) {
+      const r = rootRefOf(n, map)!;
+      const parent = n.parentId ? map.get(n.parentId) : undefined;
+      try {
+        await nativeRename(r.ref, parent ? partsOf(parent, map, true) : [], n.originalName ?? n.name, n.name);
+        finish(n.id);
+      } catch (e) { fail(n, e); }
+    }
+    for (const n of asyncOps.filter((x) => x.op === "add" && x.kind === "folder").sort((a, b) => depth(a) - depth(b))) {
+      const r = rootRefOf(n, map)!;
+      try { await nativeMkdir(r.ref, partsOf(n, map, false)); finish(n.id); } catch (e) { fail(n, e); }
+    }
+    const downloads = asyncOps.filter((x) => x.op === "add" && x.kind !== "folder");
+    const worker = async () => {
+      for (let n = downloads.shift(); n; n = downloads.shift()) {
+        const item = n;
+        const r = rootRefOf(item, map)!;
+        const parent = map.get(item.parentId!)!;
+        try {
+          await nativeDownload({
+            jobId: item.id, url: item.url!, format: item.kind as "mp3" | "mp4", quality: item.quality ?? "320k",
+            dir: diskPath(r.ref, partsOf(parent, map, false)), name: sanitize(item.name.replace(/\.(mp3|mp4)$/i, "")),
+          }, (p) => setNodes((ns) => ns.map((x) => (x.id === item.id ? { ...x, progress: p } : x))));
+          finish(item.id, { name: `${sanitize(item.name.replace(/\.(mp3|mp4)$/i, ""))}.${item.kind}` });
+        } catch (e) {
+          fail(item, e);
+          setNodes((ns) => ns.map((x) => (x.id === item.id ? { ...x, status: "pending", progress: undefined, real: undefined } : x)));
+        }
+      }
+    };
+    await Promise.all([worker(), worker()]);
+    setRealBusy(false);
   };
 
-  // simulated download / ffmpeg processing (in the desktop build this is driven by the native bridge)
+  // simulated download / ffmpeg processing for demo folders and the browser preview
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    if (!downloading.length) {
+    const simulated = downloading.filter((n) => !n.real).length;
+    if (!simulated) {
       if (tick.current) { clearInterval(tick.current); tick.current = null; }
-      if (saving) { setSaving(false); toast.success(t.savedAll); }
+      if (saving && !realBusy && !downloading.length) { setSaving(false); toast.success(t.savedAll); }
       return;
     }
     if (tick.current) return;
     tick.current = setInterval(() => {
       setNodes((ns) => ns.map((n) => {
-        if (n.status !== "downloading") return n;
+        if (n.status !== "downloading" || n.real) return n;
         const p = Math.min(100, (n.progress ?? 0) + 4 + Math.random() * 12);
         return p >= 100 ? { ...n, status: "saved", op: undefined, progress: undefined } : { ...n, progress: p };
       }));
     }, 260);
-  }, [downloading.length, saving, t.savedAll]);
+  }, [downloading, saving, realBusy, t.savedAll]);
   useEffect(() => () => { if (tick.current) clearInterval(tick.current); }, []);
 
   // keyboard: F2 rename, Delete
@@ -195,15 +302,15 @@ export function DownTrack() {
   return (
     <div className="flex h-screen flex-col overflow-hidden text-foreground">
       {/* Title bar */}
-      <div className="flex h-9 shrink-0 items-center gap-2 ps-3 text-xs select-none">
-        <Logo className="size-4" />
-        <span className="font-medium">DownTrack</span>
+      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center gap-2 ps-3 text-xs select-none">
+        <Logo className="pointer-events-none size-4" />
+        <span className="pointer-events-none font-medium">DownTrack</span>
         {saving && <span className="ms-3 flex items-center gap-1.5 text-muted-foreground"><Loader2 className="size-3 animate-spin" />{t.downloading} {Math.round(totalProgress)}%</span>}
         <div className="ms-auto flex h-full">
-          {[Minus, Square, X].map((I, i) => (
-            <span key={i} className={cn("flex w-11 items-center justify-center text-muted-foreground", i === 2 ? "hover:bg-destructive hover:text-destructive-foreground" : "hover:bg-accent")}>
+          {([[Minus, "minimize"], [Square, "maximize"], [X, "close"]] as const).map(([I, a], i) => (
+            <button key={a} onClick={() => windowAction(a)} aria-label={a} className={cn("flex w-11 items-center justify-center text-muted-foreground", i === 2 ? "hover:bg-destructive hover:text-destructive-foreground" : "hover:bg-accent")}>
               <I className={i === 1 ? "size-3" : "size-3.5"} />
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -222,7 +329,7 @@ export function DownTrack() {
             </Button>
           </div>
 
-          <Button variant="outline" className="mx-1 mb-3 justify-start gap-2 bg-card/60" onClick={() => setFolderDlg({ parent: null })}>
+          <Button variant="outline" className="mx-1 mb-3 justify-start gap-2 bg-card/60" onClick={addRoot}>
             <FolderPlus className="size-4" />{t.addRoot}
           </Button>
 
@@ -336,7 +443,11 @@ export function DownTrack() {
                               <div className="flex h-10 w-16 items-center justify-center"><Folder className="size-7 fill-warning/40 text-warning" /></div>
                             ) : (
                               <div className="relative h-10 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-                                <img src={thumb(n.ytId)} alt="" loading="lazy" className="size-full object-cover" />
+                                {n.thumbUrl || n.ytId ? (
+                                  <img src={n.thumbUrl ?? thumb(n.ytId)} alt="" loading="lazy" className="size-full object-cover" />
+                                ) : (
+                                  <div className="flex size-full items-center justify-center text-muted-foreground">{n.kind === "mp4" ? <Film className="size-5" /> : <Music2 className="size-5" />}</div>
+                                )}
                                 {n.status === "downloading" && <div className="absolute inset-0 flex items-center justify-center bg-background/60"><Download className="size-4 animate-bounce text-primary" /></div>}
                               </div>
                             )}
