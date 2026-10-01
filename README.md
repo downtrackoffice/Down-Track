@@ -1,14 +1,52 @@
-# Welcome to your Lovable project
+# DownTrack: Your Media Curator
+
+בנה אפליקציית שולחן עבודה מלאה ומודרנית להורדת מדיה מיוטיוב בשם DownTrack, מותאמת לאריזה בווינדוס (Tauri / Electron).
+
+דגשים מרכזיים:
+1. ריצה שקטה ברקע בלי פתיחת שורת פקודה (CMD / Terminal). תמיכה בתשתית לקבצים בינאריים מקומיים (yt-dlp, ffmpeg, ffprobe).
+2. תמיכה ב-20 שפות עם החלפה דינמית והתאמה מלאה של כיווניות (RTL לעברית וערבית, LTR לשאר השפות).
+3. עיצוב פרימיום ברמה הגבוהה ביותר בסגנון Windows 11 Fluent Design (אפקטי שקיפות עדינים, פינות מעוגלות, טיפוגרפיה נקייה) עם תמיכה מלאה ב-Dark Mode ו-Light Mode.
+4. מנגנון שינויים ממתינים (Staging) קפדני: שום קובץ לא יורד ושום שינוי לא נשמר בדיסק עד שלוחצים "שמור שינויים". כל פעולה (הוספה, מחיקה, שינוי שם) מופיעה מיד בממשק כסטטוס צהוב (ממתין). לחיצה על "בטל הכל" מנקה את התור, ולחיצה על "שמור שינויים" מתחילה את תהליך ההורדה והעיבוד עם מחווני התקדמות ולאחריו הסטטוס הופך לירוק (נשמר).
+
+מבנה הממשק:
+- סרגל צד (Sidebar):
+  - לוגו ושם DownTrack.
+  - כפתור הגדרות מינימליסטי (אייקון גלגל שיניים).
+  - כפתור "הוסף תיקיית שורש".
+  - עץ / רשימת תיקיות שורש (למשל: "שירים", "מוזיקה", "סרטונים").
+  - פאנל "שינויים ממתינים" בתחתית סרגל הצד עם רשימת פריטים שטרם נשמרו, כפתור "בטל הכל" וכפתור "שמור שינויים".
+
+- אזור תוכן מרכזי:
+  - סרגל עליון: כפתורי קדימה / אחורה, כפתור בית (חזרה לתיקיות הראשיות), ונתיב אינטראקטיבי (Breadcrumbs).
+  - שורת פעולות: כפתור בולט "הוסף מדיה" (+), "תיקייה חדשה", "שנה שם", "מחק".
+  - טבלת פריטים מעוצבת: תמונה ממוזערת, שם קובץ מקורי (עם אפשרות עריכה), סוג קובץ (MP3/MP4), משך זמן, גודל קובץ, סטטוס שמירה (ירוק: נשמר / צהוב: ממתין), ותפריט פעולות מהיר (...).
+
+- חלון הוספת מדיה (Dialog):
+  - שדה להדבקת קישור יוטיוב.
+  - תצוגת כרטיס שיר עם תמונה, כותרת, בחירת פורמט (MP3 / MP4) ובחירת איכות (אודיו: 128k/192k/320k | וידאו: 720p/1080p/4K).
+  - זיהוי פלייליסט: הצגת רשימת כרטיסים לכל השירים עם כפתורי פעולה מהירים ("הכל MP3", "הכל MP4", "איכות מקסימלית לכולם", "בחר/בטל הכל").
+  - כפתור "הוסף לתור השינויים".
+
+- חלון הגדרות:
+  - ערכת נושא (כהה / בהיר / לפי המערכת).
+  - פורמט ברירת מחדל (MP3 / MP4).
+  - איכות ברירת מחדל.
+  - בורר שפה מתוך 20 שפות.
+  - כפתור "בדוק ועדכן כלי הורדה" לעדכון שקט של מנוע ההורדה.
+
+יש לכלול נתוני דוגמה עשירים ואינטראקטיביים הממחישים את כל הפונקציות כולל סימולציית הורדה בלחיצה על "שמור שינויים".
 
 This project was built with [Lovable](https://lovable.dev).
 
+**Live app**: https://track-my-media.lovable.app
+
 ## Build with Lovable
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/8c992d24-cfa1-4504-852f-5b16428972f8).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 
@@ -20,10 +58,3 @@ cd <repository-name>
 npm i
 npm run dev
 ```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
