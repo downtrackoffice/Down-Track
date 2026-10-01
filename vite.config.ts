@@ -7,7 +7,7 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 // TAURI_BUILD=1 produces a static SPA (index.html + assets) for the Windows desktop bundle.
-const tauri = process.env.TAURI_BUILD === "1";
+const tauri = process.env["TAURI_BUILD"] === "1";
 
 export default defineConfig({
   tanstackStart: {

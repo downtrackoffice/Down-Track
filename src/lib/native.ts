@@ -69,22 +69,23 @@ export async function scan(ref: RootRef, depth = 0, parts: string[] = []): Promi
   return out;
 }
 
-export async function mkdir(ref: RootRef, parts: string[]) {
-  if (ref.path && isTauri()) return invoke("create_dir", { path: join(ref.path, parts) });
+export async function mkdir(ref: RootRef, parts: string[]): Promise<void> {
+  if (ref.path && isTauri()) return void (await invoke("create_dir", { path: join(ref.path, parts) }));
   if (ref.handle) await dirHandle(ref.handle, parts, true);
 }
 
-export async function remove(ref: RootRef, parts: string[]) {
-  if (ref.path && isTauri()) return invoke("delete_path", { path: join(ref.path, parts) });
+export async function remove(ref: RootRef, parts: string[]): Promise<void> {
+  if (ref.path && isTauri()) { await invoke("delete_path", { path: join(ref.path, parts) }); return; }
   if (ref.handle) {
     const parent = await dirHandle(ref.handle, parts.slice(0, -1));
     await parent.removeEntry(parts[parts.length - 1]!, { recursive: true });
   }
 }
 
-export async function rename(ref: RootRef, parentParts: string[], from: string, to: string) {
+export async function rename(ref: RootRef, parentParts: string[], from: string, to: string): Promise<void> {
   if (ref.path && isTauri()) {
-    return invoke("rename_path", { from: join(ref.path, [...parentParts, from]), to: join(ref.path, [...parentParts, to]) });
+    await invoke("rename_path", { from: join(ref.path, [...parentParts, from]), to: join(ref.path, [...parentParts, to]) });
+    return;
   }
   if (ref.handle) {
     const parent = await dirHandle(ref.handle, parentParts);
