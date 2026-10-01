@@ -15,9 +15,9 @@ export interface Node {
   size?: number; // bytes
   quality?: Quality;
   status: Status;
-  op?: PendingOp;
-  originalName?: string;
-  progress?: number;
+  op?: PendingOp | undefined;
+  originalName?: string | undefined;
+  progress?: number | undefined;
 }
 
 export const AUDIO_Q: AudioQ[] = ["128k", "192k", "320k"];
