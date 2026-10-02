@@ -39,6 +39,19 @@ fn run_capture(mut c: Command) -> Result<String, String> {
     }
 }
 
+/// Fallback pipeline against YouTube 403 blocks:
+/// 0 = Android player client, 1 = TV player client, 2/3 = cookies from a local browser.
+const ATTEMPTS: usize = 4;
+
+fn apply_attempt(c: &mut Command, attempt: usize) {
+    match attempt {
+        0 => { c.args(["--extractor-args", "youtube:player_client=android"]); }
+        1 => { c.args(["--extractor-args", "youtube:player_client=tv"]); }
+        2 => { c.args(["--cookies-from-browser", "chrome"]); }
+        _ => { c.args(["--cookies-from-browser", "edge"]); }
+    }
+}
+
 #[derive(Serialize)]
 struct MediaInfo {
     id: String,
@@ -74,9 +87,21 @@ fn to_info(v: &serde_json::Value) -> MediaInfo {
 #[tauri::command]
 async fn fetch_metadata(url: String) -> Result<Metadata, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let mut c = silent("yt-dlp");
-        c.args(["-J", "--flat-playlist", "--no-warnings", &url]);
-        let json: serde_json::Value = serde_json::from_str(&run_capture(c)?).map_err(|e| e.to_string())?;
+        let mut last_err = String::new();
+        let mut parsed: Option<serde_json::Value> = None;
+        for attempt in 0..ATTEMPTS {
+            let mut c = silent("yt-dlp");
+            apply_attempt(&mut c, attempt);
+            c.args(["-J", "--flat-playlist", "--no-warnings", &url]);
+            match run_capture(c) {
+                Ok(out) => match serde_json::from_str::<serde_json::Value>(&out) {
+                    Ok(v) => { parsed = Some(v); break; }
+                    Err(e) => last_err = e.to_string(),
+                },
+                Err(e) => last_err = e,
+            }
+        }
+        let json = parsed.ok_or(last_err)?;
         if json["_type"] == "playlist" {
             let entries = json["entries"].as_array().map(|a| a.iter().map(to_info).collect()).unwrap_or_default();
             Ok(Metadata { is_playlist: true, title: json["title"].as_str().unwrap_or_default().into(), entries })
