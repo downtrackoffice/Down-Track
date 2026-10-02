@@ -75,18 +75,18 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-xl border-border bg-popover/95 p-0 backdrop-blur-2xl" style={{ boxShadow: "var(--shadow-flyout)" }}>
+      <DialogContent className="w-[95vw] max-w-3xl sm:max-w-3xl max-h-[92vh] flex flex-col gap-0 overflow-hidden rounded-xl border-border bg-popover/95 p-0 backdrop-blur-2xl" style={{ boxShadow: "var(--shadow-flyout)" }}>
         <DialogHeader className="px-6 pt-6 pb-4 text-start">
           <DialogTitle className="text-lg font-semibold">{t.addMedia}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 px-6 pb-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-4">
+          <div className="flex min-w-0 gap-2">
+            <div className="relative min-w-0 flex-1">
               <Link2 className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchInfo()}
                 placeholder={t.pasteLink} className="h-10 ps-9 rtl:text-right" autoFocus />
             </div>
-            <Button onClick={fetchInfo} disabled={loading || !url.trim()} className="h-10 min-w-20">
+            <Button onClick={fetchInfo} disabled={loading || !url.trim()} className="h-10 min-w-20 shrink-0">
               {loading ? <Loader2 className="size-4 animate-spin" /> : t.fetch}
             </Button>
           </div>
@@ -122,8 +122,9 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
                       <span dir="ltr" className="absolute bottom-1 end-1 rounded bg-foreground/80 px-1 text-[10px] text-background">{fmtDur(d.duration)}</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p dir="auto" className="truncate text-sm font-medium">{d.title}</p>
-                      <div className="mt-2 flex items-center gap-2">
+                      <Input dir="auto" value={d.title} onChange={(e) => patch(d.key, { title: e.target.value })} aria-label={t.rename}
+                        maxLength={180} className="h-8 text-sm font-medium" />
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
                           {(["mp3", "mp4"] as Format[]).map((f) => (
                             <button key={f} onClick={() => patch(d.key, { format: f, quality: defQ(f) })}
@@ -142,14 +143,14 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
             </>
           )}
         </div>
-        <DialogFooter className="flex-row items-center gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:justify-between">
+        <DialogFooter className="flex-row flex-wrap items-center gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:justify-between">
           <Select value={target} onValueChange={setFolder}>
-            <SelectTrigger className="h-9 w-56"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 w-full min-w-0 sm:w-56"><SelectValue /></SelectTrigger>
             <SelectContent>{folders.map((f) => <SelectItem key={f.id} value={f.id}>{f.path}</SelectItem>)}</SelectContent>
           </Select>
-          <div className="flex gap-2">
+          <div className="ms-auto flex shrink-0 gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
-            <Button disabled={!selCount || !target} onClick={() => { onAdd(drafts.filter((d) => d.selected), target); onOpenChange(false); reset(); }}>
+            <Button disabled={!selCount || !target} onClick={() => { onAdd(drafts.filter((d) => d.selected).map((d) => ({ ...d, title: d.title.trim() || "untitled" })), target); onOpenChange(false); reset(); }}>
               {t.addToQueue}{selCount > 1 && ` (${selCount})`}
             </Button>
           </div>
