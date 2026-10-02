@@ -23,6 +23,8 @@ fn sidecar(name: &str) -> PathBuf {
 fn silent(name: &str) -> Command {
     let mut c = Command::new(sidecar(name));
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Avoid cp1255/cp1252 console encoding crashes on non-ASCII titles.
+    c.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
     #[cfg(windows)]
     c.creation_flags(CREATE_NO_WINDOW);
     c
