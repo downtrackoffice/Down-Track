@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getDict, isRtl } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { estSize, fmtDur, fmtSize, seed, thumb, uid, type Node } from "./data";
+import { estSize, fmtDur, fmtSize, thumb, uid, type Node } from "./data";
+
+const ROOTS_KEY = "downtrack.roots";
 import { AddMediaDialog, type Draft } from "./AddMediaDialog";
 import { SettingsDialog, type Settings } from "./SettingsDialog";
 import {
@@ -34,7 +36,7 @@ function descendants(nodes: Node[], id: string): Set<string> {
 
 export function DownTrack() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [nodes, setNodes] = useState<Node[]>(() => seed());
+  const [nodes, setNodes] = useState<Node[]>([]);
   const [history, setHistory] = useState<(string | null)[]>([null]);
   const [hIdx, setHIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -164,15 +166,12 @@ export function DownTrack() {
     return out;
   };
 
-  const addRoot = async () => {
-    if (!isTauri() && !hasFsAccess()) { setFolderDlg({ parent: null }); return; }
-    const picked = await pickFolder();
-    if (!picked) return;
+  const loadRoot = async (name: string, ref: RootRef): Promise<{ id: string; created: Node[] }> => {
     const id = uid();
-    rootsRef.current.set(id, picked.ref);
-    const created: Node[] = [{ id, parentId: null, name: picked.name, kind: "folder", status: "saved" }];
+    rootsRef.current.set(id, ref);
+    const created: Node[] = [{ id, parentId: null, name, kind: "folder", status: "saved" }];
     let entries: ScanEntry[] = [];
-    try { entries = await scan(picked.ref); } catch (e) { toast.error(String(e)); }
+    try { entries = await scan(ref); } catch (e) { toast.error(String(e)); }
     const idByPath = new Map<string, string>([["", id]]);
     for (const e of entries) {
       const pid = idByPath.get(e.parts.join("/"));
@@ -185,9 +184,41 @@ export function DownTrack() {
         created.push({ id: nid, parentId: pid, name: e.name, kind: /\.mp4$/i.test(e.name) ? "mp4" : "mp3", size: e.size, status: "saved" });
       }
     }
+    return { id, created };
+  };
+
+  const addRoot = async () => {
+    if (!isTauri() && !hasFsAccess()) { setFolderDlg({ parent: null }); return; }
+    const picked = await pickFolder();
+    if (!picked) return;
+    const { id, created } = await loadRoot(picked.name, picked.ref);
     setNodes((ns) => [...ns, ...created]);
     navigate(id);
   };
+
+  // Restore saved root folders on startup.
+  const [rootsLoaded, setRootsLoaded] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(ROOTS_KEY) ?? "[]") as { name: string; path?: string }[];
+        const all: Node[] = [];
+        for (const r of saved) {
+          if (r.path && isTauri()) all.push(...(await loadRoot(r.name, { path: r.path })).created);
+          else all.push({ id: uid(), parentId: null, name: r.name, kind: "folder", status: "saved" });
+        }
+        if (all.length) setNodes((ns) => [...all, ...ns]);
+      } catch { /* ignore */ }
+      setRootsLoaded(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!rootsLoaded) return;
+    const roots = nodes.filter((n) => n.parentId === null && !(n.op === "add" && n.status === "pending") && n.op !== "delete")
+      .map((n) => ({ name: n.originalName ?? n.name, path: rootsRef.current.get(n.id)?.path }));
+    localStorage.setItem(ROOTS_KEY, JSON.stringify(roots));
+  }, [nodes, rootsLoaded]);
 
   const finish = (id: string, patch: Partial<Node> = {}) =>
     setNodes((ns) => ns.map((x) => (x.id === id ? { ...x, status: "saved", op: undefined, originalName: undefined, progress: undefined, real: undefined, ...patch } : x)));

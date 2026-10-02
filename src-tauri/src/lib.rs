@@ -23,6 +23,8 @@ fn sidecar(name: &str) -> PathBuf {
 fn silent(name: &str) -> Command {
     let mut c = Command::new(sidecar(name));
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Avoid cp1255/cp1252 console encoding crashes on non-ASCII titles.
+    c.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
     #[cfg(windows)]
     c.creation_flags(CREATE_NO_WINDOW);
     c
@@ -100,12 +102,26 @@ struct Progress {
     percent: f64,
 }
 
+/// Strip characters Windows forbids in file names (and control chars), trailing dots/spaces.
+fn clean_name(s: &str) -> String {
+    let mut out: String = s.chars()
+        .map(|ch| if matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || ch.is_control() { '_' } else { ch })
+        .collect();
+    out = out.trim().trim_end_matches(['.', ' ']).to_string();
+    if out.is_empty() { out = "download".into(); }
+    if out.chars().count() > 180 { out = out.chars().take(180).collect(); }
+    out
+}
+
 #[tauri::command]
 async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let name = clean_name(&job.name);
         let ffmpeg_dir = sidecar("ffmpeg").parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
-        let out = PathBuf::from(&job.dir).join(format!("{}.%(ext)s", job.name));
+        let out = PathBuf::from(&job.dir).join(format!("{}.%(ext)s", name));
         let mut c = silent("yt-dlp");
+        c.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
+        c.arg("--windows-filenames");
         c.args(["--newline", "--no-playlist", "--no-warnings", "--ffmpeg-location", &ffmpeg_dir,
             "--progress-template", "download:DTPROG %(progress._percent_str)s"]);
         if job.format == "mp3" {
@@ -135,7 +151,7 @@ async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
             return Err(err.trim().to_string());
         }
         let _ = app.emit("download-progress", Progress { job_id: job.job_id.clone(), percent: 100.0 });
-        Ok(PathBuf::from(&job.dir).join(format!("{}.{}", job.name, job.format)).to_string_lossy().to_string())
+        Ok(PathBuf::from(&job.dir).join(format!("{}.{}", name, job.format)).to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }
 
