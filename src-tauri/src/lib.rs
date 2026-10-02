@@ -39,6 +39,19 @@ fn run_capture(mut c: Command) -> Result<String, String> {
     }
 }
 
+/// Fallback pipeline against YouTube 403 blocks:
+/// 0 = Android player client, 1 = TV player client, 2/3 = cookies from a local browser.
+const ATTEMPTS: usize = 4;
+
+fn apply_attempt(c: &mut Command, attempt: usize) {
+    match attempt {
+        0 => { c.args(["--extractor-args", "youtube:player_client=android"]); }
+        1 => { c.args(["--extractor-args", "youtube:player_client=tv"]); }
+        2 => { c.args(["--cookies-from-browser", "chrome"]); }
+        _ => { c.args(["--cookies-from-browser", "edge"]); }
+    }
+}
+
 #[derive(Serialize)]
 struct MediaInfo {
     id: String,
@@ -74,9 +87,21 @@ fn to_info(v: &serde_json::Value) -> MediaInfo {
 #[tauri::command]
 async fn fetch_metadata(url: String) -> Result<Metadata, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let mut c = silent("yt-dlp");
-        c.args(["-J", "--flat-playlist", "--no-warnings", &url]);
-        let json: serde_json::Value = serde_json::from_str(&run_capture(c)?).map_err(|e| e.to_string())?;
+        let mut last_err = String::new();
+        let mut parsed: Option<serde_json::Value> = None;
+        for attempt in 0..ATTEMPTS {
+            let mut c = silent("yt-dlp");
+            apply_attempt(&mut c, attempt);
+            c.args(["-J", "--flat-playlist", "--no-warnings", &url]);
+            match run_capture(c) {
+                Ok(out) => match serde_json::from_str::<serde_json::Value>(&out) {
+                    Ok(v) => { parsed = Some(v); break; }
+                    Err(e) => last_err = e.to_string(),
+                },
+                Err(e) => last_err = e,
+            }
+        }
+        let json = parsed.ok_or(last_err)?;
         if json["_type"] == "playlist" {
             let entries = json["entries"].as_array().map(|a| a.iter().map(to_info).collect()).unwrap_or_default();
             Ok(Metadata { is_playlist: true, title: json["title"].as_str().unwrap_or_default().into(), entries })
@@ -119,36 +144,50 @@ async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
         let name = clean_name(&job.name);
         let ffmpeg_dir = sidecar("ffmpeg").parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
         let out = PathBuf::from(&job.dir).join(format!("{}.%(ext)s", name));
-        let mut c = silent("yt-dlp");
-        c.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
-        c.arg("--windows-filenames");
-        c.args(["--newline", "--no-playlist", "--no-warnings", "--ffmpeg-location", &ffmpeg_dir,
-            "--progress-template", "download:DTPROG %(progress._percent_str)s"]);
-        if job.format == "mp3" {
-            let q = job.quality.to_uppercase();
-            c.args(["-x", "--audio-format", "mp3", "--audio-quality", &q, "--embed-thumbnail", "--add-metadata"]);
-        } else {
-            let h = match job.quality.as_str() { "4K" => "2160", "1080p" => "1080", _ => "720" };
-            let f = format!("bv*[height<={h}]+ba/b[height<={h}]");
-            c.args(["-f", &f, "--merge-output-format", "mp4"]);
-        }
-        c.arg("-o").arg(&out).arg(&job.url);
 
-        let mut child = c.spawn().map_err(|e| format!("failed to start yt-dlp: {e}"))?;
-        let stdout = child.stdout.take().ok_or("no stdout")?;
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if let Some(rest) = line.trim().strip_prefix("DTPROG") {
-                if let Ok(p) = rest.trim().trim_end_matches('%').trim().parse::<f64>() {
-                    // reserve the last 5% for ffmpeg post-processing
-                    let _ = app.emit("download-progress", Progress { job_id: job.job_id.clone(), percent: p * 0.95 });
+        let mut last_err = String::new();
+        let mut succeeded = false;
+        for attempt in 0..ATTEMPTS {
+            let mut c = silent("yt-dlp");
+            apply_attempt(&mut c, attempt);
+            c.arg("--windows-filenames");
+            c.args(["--newline", "--no-playlist", "--no-warnings", "--ffmpeg-location", &ffmpeg_dir,
+                "--progress-template", "download:DTPROG %(progress._percent_str)s"]);
+            if job.format == "mp3" {
+                let q = job.quality.to_uppercase();
+                c.args(["-x", "--audio-format", "mp3", "--audio-quality", &q, "--embed-thumbnail", "--add-metadata"]);
+            } else {
+                let h = match job.quality.as_str() { "4K" => "2160", "1080p" => "1080", _ => "720" };
+                let f = format!("bv*[height<={h}]+ba/b[height<={h}]");
+                c.args(["-f", &f, "--merge-output-format", "mp4"]);
+            }
+            c.arg("-o").arg(&out).arg(&job.url);
+
+            let mut child = match c.spawn() {
+                Ok(ch) => ch,
+                Err(e) => { last_err = format!("failed to start yt-dlp: {e}"); continue; }
+            };
+            let stdout = child.stdout.take().ok_or("no stdout")?;
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Some(rest) = line.trim().strip_prefix("DTPROG") {
+                    if let Ok(p) = rest.trim().trim_end_matches('%').trim().parse::<f64>() {
+                        // reserve the last 5% for ffmpeg post-processing
+                        let _ = app.emit("download-progress", Progress { job_id: job.job_id.clone(), percent: p * 0.95 });
+                    }
                 }
             }
-        }
-        let status = child.wait().map_err(|e| e.to_string())?;
-        if !status.success() {
+            let status = child.wait().map_err(|e| e.to_string())?;
+            if status.success() { succeeded = true; break; }
             let mut err = String::new();
             if let Some(mut e) = child.stderr.take() { use std::io::Read; let _ = e.read_to_string(&mut err); }
-            return Err(err.trim().to_string());
+            last_err = err.trim().to_string();
+            // Only retry on blocking/download errors (403 etc.); other errors are fatal.
+            let fatal = !last_err.contains("403") && !last_err.contains("Forbidden")
+                && !last_err.contains("unable to download") && !last_err.contains("HTTP Error");
+            if fatal { break; }
+        }
+        if !succeeded {
+            return Err(if last_err.is_empty() { "download failed".into() } else { last_err });
         }
         let _ = app.emit("download-progress", Progress { job_id: job.job_id.clone(), percent: 100.0 });
         Ok(PathBuf::from(&job.dir).join(format!("{}.{}", name, job.format)).to_string_lossy().to_string())
