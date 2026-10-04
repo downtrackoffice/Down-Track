@@ -143,7 +143,21 @@ async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let name = clean_name(&job.name);
         let ffmpeg_dir = sidecar("ffmpeg").parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
-        let out = PathBuf::from(&job.dir).join(format!("{}.%(ext)s", name));
+
+        // Verify the target directory exists and is writable before starting yt-dlp.
+        let dir = PathBuf::from(&job.dir);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err(format!("Cannot create target folder '{}': {e}", job.dir));
+        }
+        let probe = dir.join(".downtrack_write_test");
+        match std::fs::File::create(&probe) {
+            Ok(_) => { let _ = std::fs::remove_file(&probe); }
+            Err(e) => return Err(format!("Target folder '{}' is not writable: {e}", job.dir)),
+        }
+
+        // Pass the target folder via -P and the file-name template via -o separately,
+        // so Hebrew folder names are never mangled by template parsing.
+        let out = format!("{}.%(ext)s", name);
 
         let mut last_err = String::new();
         let mut succeeded = false;
