@@ -175,14 +175,16 @@ async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
                 let f = format!("bv*[height<={h}]+ba/b[height<={h}]");
                 c.args(["-f", &f, "--merge-output-format", "mp4"]);
             }
-            c.arg("-o").arg(&out).arg(&job.url);
+            c.arg("-P").arg(&job.dir).arg("-o").arg(&out).arg(&job.url);
 
             let mut child = match c.spawn() {
                 Ok(ch) => ch,
                 Err(e) => { last_err = format!("failed to start yt-dlp: {e}"); continue; }
             };
             let stdout = child.stdout.take().ok_or("no stdout")?;
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            // Decode output as UTF-8 lossy so cp1255-encoded lines never drop the original error.
+            for line in BufReader::new(stdout).split(b'\n').map_while(Result::ok) {
+                let line = String::from_utf8_lossy(&line);
                 if let Some(rest) = line.trim().strip_prefix("DTPROG") {
                     if let Ok(p) = rest.trim().trim_end_matches('%').trim().parse::<f64>() {
                         // reserve the last 5% for ffmpeg post-processing
@@ -192,9 +194,9 @@ async fn download(app: AppHandle, job: DownloadJob) -> Result<String, String> {
             }
             let status = child.wait().map_err(|e| e.to_string())?;
             if status.success() { succeeded = true; break; }
-            let mut err = String::new();
-            if let Some(mut e) = child.stderr.take() { use std::io::Read; let _ = e.read_to_string(&mut err); }
-            last_err = err.trim().to_string();
+            let mut err_bytes = Vec::new();
+            if let Some(mut e) = child.stderr.take() { use std::io::Read; let _ = e.read_to_end(&mut err_bytes); }
+            last_err = String::from_utf8_lossy(&err_bytes).trim().to_string();
             // Only retry on blocking/download errors (403 etc.); other errors are fatal.
             let fatal = !last_err.contains("403") && !last_err.contains("Forbidden")
                 && !last_err.contains("unable to download") && !last_err.contains("HTTP Error");
