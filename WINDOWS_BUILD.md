@@ -29,3 +29,9 @@ GitHub בונה עבורכם קובץ התקנה (`.exe` / `.msi`) באופן א
    `yt-dlp-x86_64-pc-windows-msvc.exe`, `ffmpeg-x86_64-pc-windows-msvc.exe`, `ffprobe-x86_64-pc-windows-msvc.exe`
 2. `bun install` ← `bunx tauri icon src-tauri/app-icon.png`
 3. פיתוח: `bunx tauri dev` · בנייה: `bunx tauri build`
+
+## עדכונים אוטומטיים (חובה פעם אחת)
+התוכנה מתעדכנת לבד ובשקט מכל Release חדש. כדי שזה יעבוד:
+1. ב-GitHub: **Settings ← Secrets and variables ← Actions ← New repository secret**.
+2. שם: `TAURI_SIGNING_PRIVATE_KEY`, ערך: כל התוכן של הקובץ `TAURI_SIGNING_PRIVATE_KEY.txt` שקיבלתם.
+3. לגרסה חדשה: העלו את `version` ב-`src-tauri/tauri.conf.json` (למשל 1.0.1) והריצו את ה-workflow עם Publish release.

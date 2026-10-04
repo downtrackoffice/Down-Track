@@ -8,3 +8,4 @@
 - Windows installers are built only in GitHub Actions (`build-windows.yml`), which downloads the latest sidecar binaries — binaries are never committed.
 - UI strings live in `src/lib/i18n.ts`; non-core languages fall back to English per key — one source of truth for 20 languages.
 - Layout uses logical properties (ms/me/ps/pe/start/end) and `rtl:` variants — RTL languages mirror automatically.
+- Auto-update uses tauri-plugin-updater against the repo's GitHub Releases latest.json (repo injected by the workflow), quiet install + restart — no user prompt.

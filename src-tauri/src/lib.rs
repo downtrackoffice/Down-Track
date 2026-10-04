@@ -269,9 +269,36 @@ fn delete_path(path: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move { silent_update_loop(handle).await });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             fetch_metadata, download, update_ytdlp, tool_versions, list_dir, create_dir, rename_path, delete_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running DownTrack");
+}
+
+/// Silently checks for a new release on startup and every 6 hours,
+/// downloads and installs it in quiet mode, then restarts the app.
+async fn silent_update_loop(app: tauri::AppHandle) {
+    use tauri_plugin_updater::UpdaterExt;
+    loop {
+        if let Ok(updater) = app.updater() {
+            if let Ok(Some(update)) = updater.check().await {
+                if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
+                    app.restart();
+                }
+            }
+        }
+        tokio_sleep(std::time::Duration::from_secs(6 * 60 * 60)).await;
+    }
+}
+
+async fn tokio_sleep(d: std::time::Duration) {
+    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
 }
