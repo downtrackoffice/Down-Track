@@ -50,6 +50,12 @@ jobs:
           Get-ChildItem $bin | Format-Table Name, Length
           & "$bin/yt-dlp-$triple.exe" --version
 
+      - name: Point auto-updater at this repository
+        shell: pwsh
+        run: |
+          $p = "src-tauri/tauri.conf.json"
+          (Get-Content $p -Raw).Replace("__REPO__", "${{ github.repository }}") | Set-Content $p -Encoding utf8
+
       - name: Install frontend dependencies
         run: bun install
 
@@ -61,17 +67,23 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tauriScript: bunx tauri
           tagName: v__VERSION__
           releaseName: "DownTrack v__VERSION__"
           releaseBody: "Download the `.exe` (recommended) or `.msi` below, run it, and DownTrack is ready."
+          updaterJsonPreferNsis: true
           releaseDraft: false
           prerelease: false
 
       - name: Build installer (artifact only)
         if: github.event_name == 'workflow_dispatch' && !inputs.publish_release
         run: bunx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Upload installers as artifact
         uses: actions/upload-artifact@v4
