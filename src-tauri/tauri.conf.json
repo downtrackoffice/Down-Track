@@ -50,12 +50,35 @@
       },
       "nsis": {
         "installMode": "currentUser",
+        "displayLanguageSelector": true,
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
         "languages": [
-          "Hebrew",
           "English",
-          "Arabic"
-        ],
-        "displayLanguageSelector": true
+          "Hebrew",
+          "Arabic",
+          "Spanish",
+          "French",
+          "German",
+          "Italian",
+          "Portuguese",
+          "Russian",
+          "SimpChinese",
+          "Japanese",
+          "Korean",
+          "Hindi",
+          "Turkish",
+          "Dutch",
+          "Polish",
+          "Ukrainian",
+          "Swedish",
+          "Indonesian",
+          "Vietnamese"
+        ]
+      },
+      "wix": {
+        "language": "en-US"
       }
     },
     "createUpdaterArtifacts": true
