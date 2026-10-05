@@ -1,6 +1,6 @@
 [package]
 name = "downtrack"
-version = "1.0.0"
+version = "1.0.1"
 description = "DownTrack — YouTube media downloader"
 edition = "2021"
 

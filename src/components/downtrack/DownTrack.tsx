@@ -352,7 +352,10 @@ export function DownTrack() {
           <div className="flex items-center gap-2.5 px-2 py-3">
             <Logo className="size-8" />
             <div className="leading-tight">
-              <p className="text-base font-semibold tracking-tight">DownTrack</p>
+              <p className="flex items-center gap-1.5 text-base font-semibold tracking-tight">
+                DownTrack
+                <span className="rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-semibold text-primary">v1.0.1</span>
+              </p>
               <p className="text-[11px] text-muted-foreground">yt-dlp · ffmpeg</p>
             </div>
             <Button variant="ghost" size="icon" className="ms-auto size-8" onClick={() => setSettingsOpen(true)} aria-label={t.settings}>
