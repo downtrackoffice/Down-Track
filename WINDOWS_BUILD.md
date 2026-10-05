@@ -35,3 +35,7 @@ GitHub בונה עבורכם קובץ התקנה (`.exe` / `.msi`) באופן א
 1. ב-GitHub: **Settings ← Secrets and variables ← Actions ← New repository secret**.
 2. שם: `TAURI_SIGNING_PRIVATE_KEY`, ערך: כל התוכן של הקובץ `TAURI_SIGNING_PRIVATE_KEY.txt` שקיבלתם.
 3. לגרסה חדשה: העלו את `version` ב-`src-tauri/tauri.conf.json` (למשל 1.0.1) והריצו את ה-workflow עם Publish release.
+
+## מתקין קטן (Online Setup)
+בכל Release מצורף גם `DownTrack-Online-Setup.exe` — קובץ קטן שמוריד תמיד את הגרסה העדכנית, בודק את החתימה שלה ומתקין בשקט באותו חלון.
+קישור קבוע להורדה: `https://github.com/<user>/<repo>/releases/latest/download/DownTrack-Online-Setup.exe`

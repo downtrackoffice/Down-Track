@@ -85,6 +85,27 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
+      - name: Build small online installer
+        shell: pwsh
+        env:
+          DT_REPO: ${{ github.repository }}
+        run: |
+          bunx tauri icon src-tauri/app-icon.png -o bootstrapper/src-tauri/icons
+          Push-Location bootstrapper
+          bunx tauri build --no-bundle
+          Pop-Location
+          Copy-Item bootstrapper/src-tauri/target/release/DownTrack-Online-Setup.exe DownTrack-Online-Setup.exe
+          Get-Item DownTrack-Online-Setup.exe | Format-Table Name, Length
+
+      - name: Attach online installer to the release
+        if: github.event_name == 'push' || inputs.publish_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          gh release upload "v$v" DownTrack-Online-Setup.exe --clobber
+
       - name: Upload installers as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -92,4 +113,5 @@ jobs:
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
+            DownTrack-Online-Setup.exe
           if-no-files-found: error
