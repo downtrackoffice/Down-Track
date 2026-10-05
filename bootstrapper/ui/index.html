@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>DownTrack Setup</title>
+<style>
+  :root { --bg:#ffffff; --fg:#1f1f1f; --mut:#5f6368; --track:#e8eaed; --acc:#2563eb; --err:#c5221f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#202124; --fg:#e8eaed; --mut:#9aa0a6; --track:#3c4043; --acc:#8ab4f8; --err:#f28b82; } }
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; background:var(--bg); color:var(--fg); font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif; user-select:none; overflow:hidden; }
+  .bar { height:36px; display:flex; justify-content:flex-end; }
+  .x { width:46px; border:0; background:transparent; color:var(--mut); font-size:16px; cursor:pointer; }
+  .x:hover { background:#e81123; color:#fff; }
+  main { padding:8px 48px 0; display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .logo { width:72px; height:72px; border-radius:18px; background:linear-gradient(135deg,#3b6fe0,#d9475a); display:grid; place-items:center; margin:12px 0 22px; }
+  h1 { font-size:22px; font-weight:600; }
+  p { color:var(--mut); font-size:13.5px; margin-top:10px; min-height:20px; }
+  .track { width:100%; height:4px; background:var(--track); border-radius:2px; margin-top:34px; overflow:hidden; position:relative; }
+  .fill { height:100%; width:0; background:var(--acc); transition:width .2s; }
+  .ind .fill { width:30%; position:absolute; animation:slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { inset-inline-start:-30%; } to { inset-inline-start:100%; } }
+  .err h1 { color:var(--err); }
+  button.retry { margin-top:22px; padding:8px 22px; border-radius:18px; border:0; background:var(--acc); color:var(--bg); font-weight:600; cursor:pointer; display:none; }
+  .err button.retry { display:inline-block; }
+  .err .track { display:none; }
+</style>
+</head>
+<body>
+<div class="bar" data-tauri-drag-region><button class="x" id="close" aria-label="Close">✕</button></div>
+<main id="m">
+  <div class="logo" data-tauri-drag-region>
+    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+  </div>
+  <h1 id="h"></h1>
+  <p id="s"></p>
+  <div class="track ind" id="t"><div class="fill" id="f"></div></div>
+  <button class="retry" id="r"></button>
+</main>
+<script>
+const L = {
+  en:["Installing DownTrack","Finding the latest version…","Downloading…","Checking the download…","Installing…","DownTrack is ready","Installation failed","Try again"],
+  he:["מתקין את DownTrack","מחפש את הגרסה העדכנית…","מוריד…","בודק את הקובץ…","מתקין…","DownTrack מוכנה","ההתקנה נכשלה","נסה שוב"],
+  ar:["جارٍ تثبيت DownTrack","جارٍ البحث عن أحدث إصدار…","جارٍ التنزيل…","جارٍ التحقق من الملف…","جارٍ التثبيت…","DownTrack جاهز","فشل التثبيت","حاول مجددًا"],
+  es:["Instalando DownTrack","Buscando la última versión…","Descargando…","Comprobando la descarga…","Instalando…","DownTrack está listo","La instalación falló","Reintentar"],
+  fr:["Installation de DownTrack","Recherche de la dernière version…","Téléchargement…","Vérification du fichier…","Installation…","DownTrack est prêt","Échec de l'installation","Réessayer"],
+  de:["DownTrack wird installiert","Neueste Version wird gesucht…","Wird heruntergeladen…","Download wird geprüft…","Wird installiert…","DownTrack ist bereit","Installation fehlgeschlagen","Erneut versuchen"],
+  it:["Installazione di DownTrack","Ricerca dell'ultima versione…","Download in corso…","Verifica del file…","Installazione…","DownTrack è pronto","Installazione non riuscita","Riprova"],
+  pt:["Instalando o DownTrack","Procurando a versão mais recente…","Baixando…","Verificando o download…","Instalando…","O DownTrack está pronto","Falha na instalação","Tentar novamente"],
+  ru:["Установка DownTrack","Поиск последней версии…","Загрузка…","Проверка файла…","Установка…","DownTrack готов","Ошибка установки","Повторить"],
+  zh:["正在安装 DownTrack","正在查找最新版本…","正在下载…","正在校验文件…","正在安装…","DownTrack 已就绪","安装失败","重试"],
+  ja:["DownTrack をインストール中","最新バージョンを確認中…","ダウンロード中…","ファイルを確認中…","インストール中…","DownTrack の準備ができました","インストールに失敗しました","再試行"],
+  ko:["DownTrack 설치 중","최신 버전 확인 중…","다운로드 중…","파일 확인 중…","설치 중…","DownTrack 준비 완료","설치 실패","다시 시도"],
+  hi:["DownTrack इंस्टॉल हो रहा है","नवीनतम संस्करण खोजा जा रहा है…","डाउनलोड हो रहा है…","फ़ाइल की जाँच हो रही है…","इंस्टॉल हो रहा है…","DownTrack तैयार है","इंस्टॉल विफल रहा","फिर से कोशिश करें"],
+  tr:["DownTrack yükleniyor","En son sürüm aranıyor…","İndiriliyor…","Dosya doğrulanıyor…","Yükleniyor…","DownTrack hazır","Yükleme başarısız","Tekrar dene"],
+  nl:["DownTrack installeren","Nieuwste versie zoeken…","Downloaden…","Download controleren…","Installeren…","DownTrack is klaar","Installatie mislukt","Opnieuw proberen"],
+  pl:["Instalowanie DownTrack","Wyszukiwanie najnowszej wersji…","Pobieranie…","Sprawdzanie pliku…","Instalowanie…","DownTrack jest gotowy","Instalacja nie powiodła się","Spróbuj ponownie"],
+  uk:["Встановлення DownTrack","Пошук останньої версії…","Завантаження…","Перевірка файлу…","Встановлення…","DownTrack готовий","Помилка встановлення","Спробувати знову"],
+  sv:["Installerar DownTrack","Söker efter senaste versionen…","Laddar ner…","Kontrollerar filen…","Installerar…","DownTrack är klart","Installationen misslyckades","Försök igen"],
+  id:["Memasang DownTrack","Mencari versi terbaru…","Mengunduh…","Memeriksa berkas…","Memasang…","DownTrack siap","Pemasangan gagal","Coba lagi"],
+  vi:["Đang cài đặt DownTrack","Đang tìm phiên bản mới nhất…","Đang tải xuống…","Đang kiểm tra tệp…","Đang cài đặt…","DownTrack đã sẵn sàng","Cài đặt thất bại","Thử lại"],
+};
+const code = (navigator.language || "en").toLowerCase().split("-")[0];
+const T = L[code] || L.en;
+document.documentElement.lang = code;
+document.documentElement.dir = (code === "he" || code === "ar") ? "rtl" : "ltr";
+const $ = (id) => document.getElementById(id);
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+const win = window.__TAURI__.window.getCurrentWindow();
+$("close").onclick = () => win.close();
+$("r").textContent = T[7];
+const mb = (b) => (b / 1048576).toFixed(1) + " MB";
+
+listen("setup-progress", ({ payload: p }) => {
+  const t = $("t"), f = $("f");
+  if (p.phase === "download" && p.total) {
+    t.classList.remove("ind");
+    f.style.width = Math.min(100, (p.received / p.total) * 100) + "%";
+    $("s").textContent = `${T[2]} ${mb(p.received)} / ${mb(p.total)}`;
+    return;
+  }
+  t.classList.add("ind"); f.style.width = "";
+  $("s").textContent = { fetch: T[1], download: T[2], verify: T[3], install: T[4], done: "" }[p.phase] ?? "";
+});
+
+async function run() {
+  $("m").classList.remove("err");
+  $("h").textContent = T[0];
+  try {
+    await invoke("install");
+    $("h").textContent = T[5];
+    $("t").classList.remove("ind"); $("f").style.width = "100%";
+    setTimeout(() => win.close(), 1500);
+  } catch (e) {
+    $("m").classList.add("err");
+    $("h").textContent = T[6];
+    $("s").textContent = String(e);
+  }
+}
+$("r").onclick = run;
+run();
+</script>
+</body>
+</html>
