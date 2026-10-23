@@ -45,6 +45,9 @@ const en = {
   savedAll: "All changes saved to disk", discarded: "Pending changes discarded",
   quality: "Quality", format: "Format", selected: "selected", silentEngine: "Engine runs silently in the background",
   close: "Close", audio: "Audio", video: "Video", undo: "Undo",
+  addByLink: "Link or playlist", searchYouTube: "Search YouTube", searchPlaceholder: "Search videos or paste a channel link…",
+  search: "Search", channel: "Channel", loadMore: "Load more", noResults: "No videos found",
+  discoveryUnavailable: "YouTube search is available in the installed Windows app.", retry: "Try again",
 };
 export type Dict = typeof en;
 
@@ -66,6 +69,9 @@ const he: Dict = {
   savedAll: "כל השינויים נשמרו בדיסק", discarded: "השינויים הממתינים בוטלו",
   quality: "איכות", format: "פורמט", selected: "נבחרו", silentEngine: "המנוע רץ בשקט ברקע",
   close: "סגור", audio: "אודיו", video: "וידאו", undo: "בטל",
+  addByLink: "קישור או פלייליסט", searchYouTube: "חיפוש ביוטיוב", searchPlaceholder: "חפש סרטונים או הדבק קישור לערוץ…",
+  search: "חפש", channel: "ערוץ", loadMore: "טען עוד", noResults: "לא נמצאו סרטונים",
+  discoveryUnavailable: "חיפוש ביוטיוב זמין בתוכנת Windows המותקנת.", retry: "נסה שוב",
 };
 
 const ar: Dict = {
@@ -86,6 +92,9 @@ const ar: Dict = {
   savedAll: "تم حفظ جميع التغييرات", discarded: "تم إلغاء التغييرات المعلّقة",
   quality: "الجودة", format: "الصيغة", selected: "محدد", silentEngine: "المحرك يعمل بصمت في الخلفية",
   close: "إغلاق", audio: "صوت", video: "فيديو", undo: "تراجع",
+  addByLink: "رابط أو قائمة تشغيل", searchYouTube: "البحث في يوتيوب", searchPlaceholder: "ابحث عن فيديو أو الصق رابط قناة…",
+  search: "بحث", channel: "القناة", loadMore: "تحميل المزيد", noResults: "لم يتم العثور على فيديوهات",
+  discoveryUnavailable: "البحث في يوتيوب متاح في تطبيق Windows المثبت.", retry: "حاول مجددًا",
 };
 
 // Core UI strings for the remaining languages; anything missing falls back to English.
