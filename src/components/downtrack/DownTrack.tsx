@@ -220,6 +220,9 @@ export function DownTrack() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Let effect cleanup run before restoring, including React's development replay.
+      await Promise.resolve();
+      if (cancelled) return;
       try {
         const saved = JSON.parse(localStorage.getItem(ROOTS_KEY) ?? "[]") as { name: string; path?: string }[];
         const all: Node[] = [];
