@@ -105,12 +105,12 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
             </Button>
           </div>
 
-          </>}
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             {["https://youtu.be/fJ9rUzIMcZQ", "https://www.youtube.com/playlist?list=PLDownTrackDemo"].map((s) => (
               <button key={s} onClick={() => setUrl(s)} dir="ltr" className="rounded-md border border-border px-2 py-1 hover:bg-accent">{s.replace("https://", "")}</button>
             ))}
           </div>
+          </>}
 
           {loading && (
             <div className="space-y-2">{[0, 1].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />)}</div>
