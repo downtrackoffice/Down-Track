@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter};
+mod media_browse;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -119,6 +120,30 @@ struct DownloadJob {
     quality: String, // 128k/192k/320k | 720p/1080p/4K
     dir: String,
     name: String,    // file name without extension
+}
+
+/// Read-only discovery: never downloads media or changes the user's library.
+#[tauri::command]
+async fn browse_youtube(query: String, channel: bool, page: u32) -> Result<media_browse::BrowseResults, String> {
+    let (target, start, end) = media_browse::browse_target(&query, channel, page)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut last_err = String::new();
+        for attempt in 0..ATTEMPTS {
+            let mut c = silent("yt-dlp");
+            apply_attempt(&mut c, attempt);
+            c.args(["-J", "--flat-playlist", "--skip-download", "--no-warnings", "--ignore-errors",
+                "--socket-timeout", "15", "--retries", "1", "--playlist-start", &start.to_string(),
+                "--playlist-end", &end.to_string(), "--", &target]);
+            match run_capture(c) {
+                Ok(out) => match serde_json::from_str::<serde_json::Value>(&out) {
+                    Ok(json) => return Ok(media_browse::parse_results(&json)),
+                    Err(e) => last_err = e.to_string(),
+                },
+                Err(e) => last_err = e,
+            }
+        }
+        Err(last_err)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[derive(Serialize, Clone)]
@@ -277,7 +302,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            fetch_metadata, download, update_ytdlp, tool_versions, list_dir, create_dir, rename_path, delete_path
+            fetch_metadata, browse_youtube, download, update_ytdlp, tool_versions, list_dir, create_dir, rename_path, delete_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running DownTrack");
