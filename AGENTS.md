@@ -7,6 +7,7 @@
 - `TAURI_BUILD=1` switches TanStack Start to SPA mode; the static output lands in `.output/public` (Nitro) for the desktop bundle — web build stays SSR.
 - Windows installers are built only in GitHub Actions (`build-windows.yml`), which downloads the latest sidecar binaries — binaries are never committed.
 - UI strings live in `src/lib/i18n.ts`; non-core languages fall back to English per key — one source of truth for 20 languages.
+- YouTube discovery uses the existing local yt-dlp through the native bridge, with read-only paged search/channel commands; browser preview shows an explicit unavailable state rather than fake search results — no new service or credentials are required.
 - Layout uses logical properties (ms/me/ps/pe/start/end) and `rtl:` variants — RTL languages mirror automatically.
 - Auto-update uses tauri-plugin-updater against the repo's GitHub Releases latest.json (repo injected by the workflow), quiet install + restart — no user prompt.
 - `bootstrapper/` is a separate tiny Tauri app (online installer): reads the latest release's latest.json, verifies the NSIS setup with the updater minisign pubkey (embedded at build), runs it with /S — reuses the updater's signed artifacts instead of a second pipeline.

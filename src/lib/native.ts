@@ -10,6 +10,13 @@ export interface RootRef { path?: string; handle?: FileSystemDirectoryHandle }
 export interface ScanEntry { parts: string[]; name: string; isDir: boolean; size: number }
 
 export interface RemoteMedia { id: string; title: string; duration: number; thumbnail: string; url: string }
+export interface YouTubeMedia extends RemoteMedia { channel: string; channel_url: string }
+export interface YouTubeResults { entries: YouTubeMedia[]; has_more: boolean }
+
+export async function browseYouTube(query: string, channel = false, page = 0): Promise<YouTubeResults> {
+  if (!isTauri()) throw new Error("YouTube search is available in the installed Windows app");
+  return invoke<YouTubeResults>("browse_youtube", { query, channel, page });
+}
 
 const invoke = async <T,>(cmd: string, args?: Record<string, unknown>) => {
   const { invoke } = await import("@tauri-apps/api/core");

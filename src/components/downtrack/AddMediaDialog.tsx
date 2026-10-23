@@ -10,6 +10,8 @@ import type { Dict } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { fetchMetadata, isTauri } from "@/lib/native";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { YouTubeDiscovery } from "./YouTubeDiscovery";
 
 export interface Draft {
   key: string; ytId: string; title: string; duration: number;
@@ -32,9 +34,10 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [isList, setIsList] = useState(false);
   const [folder, setFolder] = useState<string>("");
+  const [mode, setMode] = useState("link");
   const target = folder || defaultFolder || folders[0]?.id || "";
 
-  const reset = () => { setUrl(""); setDrafts([]); setIsList(false); setFolder(""); };
+  const reset = () => { setUrl(""); setDrafts([]); setIsList(false); setFolder(""); setMode("link"); };
   const defQ = (f: Format): Quality => (f === "mp3" ? defAudio : defVideo);
 
   const fetchInfo = () => {
@@ -53,7 +56,8 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
     setTimeout(() => {
       const list = /[?&]list=/.test(url);
       const mk = (i: number): Draft => {
-        const c = CATALOG[i % CATALOG.length]!;
+        const c = CATALOG[i % CATALOG.length];
+        if (!c) throw new Error("No preview media available");
         return { key: `${c.ytId}-${i}`, ytId: c.ytId, title: c.title, duration: c.duration, url: `https://www.youtube.com/watch?v=${c.ytId}`, format: defFormat, quality: defQ(defFormat), selected: true };
       };
       if (list) {
@@ -80,6 +84,16 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
           <DialogTitle className="text-lg font-semibold">{t.addMedia}</DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-4">
+          <Tabs value={mode} onValueChange={(value) => { setMode(value); setDrafts([]); setIsList(false); }}>
+            <TabsList className="w-full"><TabsTrigger value="link" disabled={loading} className="flex-1">{t.addByLink}</TabsTrigger><TabsTrigger value="search" disabled={loading} className="flex-1">{t.searchYouTube}</TabsTrigger></TabsList>
+          </Tabs>
+          {mode === "search" && <YouTubeDiscovery t={t} selected={drafts.filter((d) => d.selected).map((d) => d.ytId)} onToggle={(item) => {
+            setDrafts((prev) => prev.some((d) => d.ytId === item.id) ? prev.filter((d) => d.ytId !== item.id) : [...prev, {
+              key: item.id, ytId: item.id, title: item.title, duration: item.duration, url: item.url, thumb: item.thumbnail,
+              format: defFormat, quality: defQ(defFormat), selected: true,
+            }]);
+          }} />}
+          {mode === "link" && <>
           <div className="flex min-w-0 gap-2">
             <div className="relative min-w-0 flex-1">
               <Link2 className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -90,11 +104,13 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
               {loading ? <Loader2 className="size-4 animate-spin" /> : t.fetch}
             </Button>
           </div>
+
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             {["https://youtu.be/fJ9rUzIMcZQ", "https://www.youtube.com/playlist?list=PLDownTrackDemo"].map((s) => (
               <button key={s} onClick={() => setUrl(s)} dir="ltr" className="rounded-md border border-border px-2 py-1 hover:bg-accent">{s.replace("https://", "")}</button>
             ))}
           </div>
+          </>}
 
           {loading && (
             <div className="space-y-2">{[0, 1].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />)}</div>
@@ -102,9 +118,9 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
 
           {drafts.length > 0 && (
             <>
-              {isList && (
+              {(isList || mode === "search") && (
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2">
-                  <span className="flex items-center gap-1.5 px-2 text-sm font-medium text-primary"><ListMusic className="size-4" />{t.playlistDetected} · {selCount}/{drafts.length}</span>
+                  <span className="flex items-center gap-1.5 px-2 text-sm font-medium text-primary"><ListMusic className="size-4" />{isList ? t.playlistDetected : t.selected} · {selCount}/{drafts.length}</span>
                   <div className="ms-auto flex flex-wrap gap-1">
                     <Button size="sm" variant="ghost" onClick={() => all(() => ({ format: "mp3", quality: defAudio }))}><Music2 className="size-3.5" />{t.allMp3}</Button>
                     <Button size="sm" variant="ghost" onClick={() => all(() => ({ format: "mp4", quality: defVideo }))}><Film className="size-3.5" />{t.allMp4}</Button>
@@ -116,7 +132,7 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
               <div className="max-h-[42vh] space-y-2 overflow-y-auto pe-1">
                 {drafts.map((d) => (
                   <div key={d.key} className={cn("flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 transition-opacity", !d.selected && "opacity-50")}>
-                    {isList && <Checkbox checked={d.selected} onCheckedChange={(v) => patch(d.key, { selected: !!v })} />}
+                    {(isList || mode === "search") && <Checkbox checked={d.selected} aria-label={`${t.selected}: ${d.title}`} onCheckedChange={(v) => patch(d.key, { selected: !!v })} />}
                     <div className="relative shrink-0">
                       <img src={d.thumb ?? thumb(d.ytId)} alt="" className={cn("h-14 rounded-md object-cover", isList ? "w-24" : "w-32 h-[72px]")} />
                       <span dir="ltr" className="absolute bottom-1 end-1 rounded bg-foreground/80 px-1 text-[10px] text-background">{fmtDur(d.duration)}</span>
@@ -127,8 +143,8 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
                           {(["mp3", "mp4"] as Format[]).map((f) => (
-                            <button key={f} onClick={() => patch(d.key, { format: f, quality: defQ(f) })}
-                              className={cn("rounded px-2.5 py-0.5 text-xs font-semibold uppercase transition", d.format === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>{f}</button>
+                            <Button variant="ghost" key={f} onClick={() => patch(d.key, { format: f, quality: defQ(f) })}
+                              className={cn("h-6 rounded px-2.5 py-0.5 text-xs font-semibold uppercase transition", d.format === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>{f}</Button>
                           ))}
                         </div>
                         <Select value={d.quality} onValueChange={(v) => patch(d.key, { quality: v as Quality })}>
@@ -149,7 +165,7 @@ export function AddMediaDialog({ open, onOpenChange, t, defFormat, defAudio, def
             <SelectContent>{folders.map((f) => <SelectItem key={f.id} value={f.id}>{f.path}</SelectItem>)}</SelectContent>
           </Select>
           <div className="ms-auto flex shrink-0 gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button variant="outline" onClick={() => { onOpenChange(false); reset(); }}>{t.cancel}</Button>
             <Button disabled={!selCount || !target} onClick={() => { onAdd(drafts.filter((d) => d.selected).map((d) => ({ ...d, title: d.title.trim() || "untitled" })), target); onOpenChange(false); reset(); }}>
               {t.addToQueue}{selCount > 1 && ` (${selCount})`}
             </Button>
