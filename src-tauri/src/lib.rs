@@ -40,11 +40,25 @@ fn run_capture(mut c: Command) -> Result<String, String> {
     }
 }
 
-/// Fallback pipeline against YouTube 403 blocks:
-/// 0 = Android player client, 1 = TV player client, 2/3 = cookies from a local browser.
+/// Fallback pipeline against YouTube blocks: a user-chosen cookies.txt goes first,
+/// then Android/TV clients, then cookies from a local browser.
 const ATTEMPTS: usize = 4;
 
+static COOKIES_FILE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+fn set_cookies_file(path: Option<String>) {
+    if let Ok(mut g) = COOKIES_FILE.lock() {
+        *g = path.filter(|p| !p.trim().is_empty());
+    }
+}
+
 fn apply_attempt(c: &mut Command, attempt: usize) {
+    let cookies = COOKIES_FILE.lock().ok().and_then(|g| (*g).clone());
+    if let (0, Some(path)) = (attempt, cookies) {
+        c.args(["--cookies", path.as_str()]);
+        return;
+    }
     match attempt {
         0 => { c.args(["--extractor-args", "youtube:player_client=android"]); }
         1 => { c.args(["--extractor-args", "youtube:player_client=tv"]); }
@@ -302,7 +316,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            fetch_metadata, browse_youtube, download, update_ytdlp, tool_versions, list_dir, create_dir, rename_path, delete_path
+            fetch_metadata, browse_youtube, download, update_ytdlp, tool_versions, list_dir, create_dir, rename_path, delete_path, set_cookies_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running DownTrack");
