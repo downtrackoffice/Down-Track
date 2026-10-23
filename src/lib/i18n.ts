@@ -48,6 +48,7 @@ const en = {
   addByLink: "Link or playlist", searchYouTube: "Search YouTube", searchPlaceholder: "Search videos or paste a channel link…",
   search: "Search", channel: "Channel", loadMore: "Load more", noResults: "No videos found",
   discoveryUnavailable: "YouTube search is available in the installed Windows app.", retry: "Try again",
+  disconnectRoot: "Remove folder access", disconnectRootHint: "The folder and its files will remain on your computer. Pending changes in this folder will be discarded.",
 };
 export type Dict = typeof en;
 
@@ -72,6 +73,7 @@ const he: Dict = {
   addByLink: "קישור או פלייליסט", searchYouTube: "חיפוש ביוטיוב", searchPlaceholder: "חפש סרטונים או הדבק קישור לערוץ…",
   search: "חפש", channel: "ערוץ", loadMore: "טען עוד", noResults: "לא נמצאו סרטונים",
   discoveryUnavailable: "חיפוש ביוטיוב זמין בתוכנת Windows המותקנת.", retry: "נסה שוב",
+  disconnectRoot: "הסר גישה לתיקייה", disconnectRootHint: "התיקייה והקבצים שלה יישארו במחשב ללא שינוי. השינויים הממתינים בתיקייה זו יבוטלו.",
 };
 
 const ar: Dict = {
@@ -95,6 +97,7 @@ const ar: Dict = {
   addByLink: "رابط أو قائمة تشغيل", searchYouTube: "البحث في يوتيوب", searchPlaceholder: "ابحث عن فيديو أو الصق رابط قناة…",
   search: "بحث", channel: "القناة", loadMore: "تحميل المزيد", noResults: "لم يتم العثور على فيديوهات",
   discoveryUnavailable: "البحث في يوتيوب متاح في تطبيق Windows المثبت.", retry: "حاول مجددًا",
+  disconnectRoot: "إزالة الوصول إلى المجلد", disconnectRootHint: "سيبقى المجلد وملفاته على الكمبيوتر دون تغيير. سيتم إلغاء التغييرات المعلقة في هذا المجلد.",
 };
 
 // Core UI strings for the remaining languages; anything missing falls back to English.

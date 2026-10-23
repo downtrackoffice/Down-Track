@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Home, ChevronRight, Plus, FolderPlus, PencilLine, Trash2, Settings as Gear,
-  Folder, FolderOpen, MoreHorizontal, Undo2, Save, X, Music2, Film, Download, Minus, Square, CircleCheck, Clock, Loader2, FolderInput,
+  Folder, FolderOpen, MoreHorizontal, Undo2, Save, X, Music2, Film, Download, Minus, Square, CircleCheck, Clock, Loader2, FolderInput, FolderMinus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { getDict, isRtl } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { estSize, fmtDur, fmtSize, thumb, uid, type Node } from "./data";
+import { disconnectedIds } from "./root-access";
 
 const ROOTS_KEY = "downtrack.roots";
 import { AddMediaDialog, type Draft } from "./AddMediaDialog";
@@ -43,6 +44,7 @@ export function DownTrack() {
   const [editing, setEditing] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [disconnectId, setDisconnectId] = useState<string | null>(null);
   const [folderDlg, setFolderDlg] = useState<{ parent: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [realBusy, setRealBusy] = useState(false);
@@ -122,6 +124,8 @@ export function DownTrack() {
   };
 
   const remove = (id: string) => {
+    if (saving) return;
+    if (byId.get(id)?.parentId === null) { setDisconnectId(id); return; }
     setNodes((ns) => {
       const n = ns.find((x) => x.id === id);
       if (!n) return ns;
@@ -129,6 +133,21 @@ export function DownTrack() {
       return ns.map((x) => (x.id === id ? { ...x, name: x.originalName ?? x.name, originalName: undefined, op: "delete", status: "pending" } : x));
     });
     if (selected === id) setSelected(null);
+  };
+
+  const disconnectRoot = () => {
+    if (!disconnectId || saving) return;
+    const ids = disconnectedIds(nodes, disconnectId);
+    if (!ids.size) { setDisconnectId(null); return; }
+    rootsRef.current.delete(disconnectId);
+    setNodes((ns) => ns.filter((node) => !ids.has(node.id)));
+    setHistory([current && !ids.has(current) ? current : null]);
+    setHIdx(0);
+    setSelected(null);
+    setEditing(null);
+    setAddOpen(false);
+    setFolderDlg(null);
+    setDisconnectId(null);
   };
 
   const revert = (id: string) => {
@@ -199,7 +218,11 @@ export function DownTrack() {
   // Restore saved root folders on startup.
   const [rootsLoaded, setRootsLoaded] = useState(false);
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      // Let effect cleanup run before restoring, including React's development replay.
+      await Promise.resolve();
+      if (cancelled) return;
       try {
         const saved = JSON.parse(localStorage.getItem(ROOTS_KEY) ?? "[]") as { name: string; path?: string }[];
         const all: Node[] = [];
@@ -207,10 +230,11 @@ export function DownTrack() {
           if (r.path && isTauri()) all.push(...(await loadRoot(r.name, { path: r.path })).created);
           else all.push({ id: uid(), parentId: null, name: r.name, kind: "folder", status: "saved" });
         }
-        if (all.length) setNodes((ns) => [...all, ...ns]);
+        if (!cancelled && all.length) setNodes((ns) => [...all, ...ns]);
       } catch { /* ignore */ }
-      setRootsLoaded(true);
+      if (!cancelled) setRootsLoaded(true);
     })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
@@ -371,7 +395,8 @@ export function DownTrack() {
           <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             <SideItem active={current === null} onClick={() => navigate(null)} icon={<Home className="size-4" />} label={t.home} />
             {roots.map((r) => (
-              <FolderTree key={r.id} node={r} nodes={nodes} depth={0} current={current} onOpen={navigate} />
+              <FolderTree key={r.id} node={r} nodes={nodes} depth={0} current={current} onOpen={navigate}
+                onDisconnect={setDisconnectId} disconnectLabel={t.disconnectRoot} saving={saving} />
             ))}
           </nav>
 
@@ -435,7 +460,7 @@ export function DownTrack() {
             <div className="mx-1 h-6 w-px bg-border" />
             <Button variant="ghost" className="gap-1.5" onClick={() => setFolderDlg({ parent: current })}><FolderPlus className="size-4" />{t.newFolder}</Button>
             <Button variant="ghost" className="gap-1.5" disabled={!sel || sel.op === "delete"} onClick={() => sel && setEditing(sel.id)}><PencilLine className="size-4" />{t.rename}</Button>
-            <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" disabled={!sel || sel.op === "delete"} onClick={() => sel && remove(sel.id)}><Trash2 className="size-4" />{t.delete}</Button>
+            <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" disabled={saving || !sel || sel.op === "delete"} onClick={() => sel && remove(sel.id)}>{sel?.parentId === null ? <FolderMinus className="size-4" /> : <Trash2 className="size-4" />}{sel?.parentId === null ? t.disconnectRoot : t.delete}</Button>
             <span className="ms-auto text-xs text-muted-foreground tabular-nums">{items.length} {t.items}</span>
           </div>
 
@@ -521,7 +546,7 @@ export function DownTrack() {
                               <DropdownMenuItem disabled={n.op === "delete" || n.status === "downloading"} onClick={() => { setSelected(n.id); setEditing(n.id); }}><PencilLine className="size-4" />{t.rename}</DropdownMenuItem>
                               {n.status === "pending" && <DropdownMenuItem onClick={() => revert(n.id)}><Undo2 className="size-4" />{t.undo}</DropdownMenuItem>}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem disabled={n.op === "delete" || n.status === "downloading"} className="text-destructive focus:text-destructive" onClick={() => remove(n.id)}><Trash2 className="size-4" />{t.delete}</DropdownMenuItem>
+                              <DropdownMenuItem disabled={saving || n.op === "delete" || n.status === "downloading"} className="text-destructive focus:text-destructive" onClick={() => remove(n.id)}>{n.parentId === null ? <FolderMinus className="size-4" /> : <Trash2 className="size-4" />}{n.parentId === null ? t.disconnectRoot : t.delete}</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>
@@ -539,6 +564,19 @@ export function DownTrack() {
         folders={allFolders} defaultFolder={current ?? undefined} onAdd={addMedia} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} t={t} s={settings} set={(p) => setSettings((s) => ({ ...s, ...p }))} />
       <NewFolderDialog state={folderDlg} onClose={() => setFolderDlg(null)} t={t} onCreate={addFolder} />
+      <Dialog open={disconnectId !== null} onOpenChange={(open) => { if (!open) setDisconnectId(null); }}>
+        <DialogContent dir={rtl ? "rtl" : "ltr"} className="max-w-sm">
+          <DialogHeader className="text-start">
+            <DialogTitle>{t.disconnectRoot}</DialogTitle>
+          </DialogHeader>
+          <p dir="auto" className="break-words font-medium">{disconnectId ? byId.get(disconnectId)?.name : ""}</p>
+          <p className="text-sm text-muted-foreground">{t.disconnectRootHint}</p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDisconnectId(null)}>{t.cancel}</Button>
+            <Button disabled={saving} onClick={disconnectRoot}><FolderMinus className="size-4" />{t.disconnectRoot}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -564,13 +602,17 @@ function SideItem({ active, onClick, icon, label, depth = 0, pending, deleted }:
   );
 }
 
-function FolderTree({ node, nodes, depth, current, onOpen }: { node: Node; nodes: Node[]; depth: number; current: string | null; onOpen: (id: string) => void }) {
+function FolderTree({ node, nodes, depth, current, onOpen, onDisconnect, disconnectLabel, saving }: { node: Node; nodes: Node[]; depth: number; current: string | null; onOpen: (id: string) => void; onDisconnect?: (id: string) => void; disconnectLabel?: string; saving?: boolean }) {
   const kids = nodes.filter((n) => n.parentId === node.id && n.kind === "folder");
   return (
     <>
-      <SideItem depth={depth} active={current === node.id} onClick={() => node.op !== "delete" && onOpen(node.id)} label={node.name}
+      <div className="flex items-center [&>button:first-child]:min-w-0 [&>button:first-child]:flex-1">
+        <SideItem depth={depth} active={current === node.id} onClick={() => node.op !== "delete" && onOpen(node.id)} label={node.name}
         pending={node.status === "pending"} deleted={node.op === "delete"}
         icon={<Folder className={cn("size-4 shrink-0", current === node.id ? "fill-warning/50 text-warning" : "text-warning")} />} />
+        {node.parentId === null && onDisconnect && <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" disabled={saving}
+          title={disconnectLabel} aria-label={`${disconnectLabel}: ${node.name}`} onClick={() => onDisconnect(node.id)}><FolderMinus className="size-4" /></Button>}
+      </div>
       {kids.map((k) => <FolderTree key={k.id} node={k} nodes={nodes} depth={depth + 1} current={current} onOpen={onOpen} />)}
     </>
   );
