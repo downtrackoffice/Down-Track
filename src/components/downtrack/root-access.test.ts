@@ -1,4 +1,5 @@
-import { test, expect } from "bun:test";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { disconnectedIds } from "./root-access";
 import type { Node } from "./data";
 
@@ -11,13 +12,13 @@ test("disconnecting root access only removes its in-app subtree, not other roots
   ];
   const original = structuredClone(nodes);
   const ids = disconnectedIds(nodes, "root");
-  expect([...ids]).toEqual(["root", "child", "song"]);
-  expect(nodes.filter((node) => !ids.has(node.id))).toEqual([original[3]]);
-  expect(nodes).toEqual(original);
+  assert.deepEqual([...ids], ["root", "child", "song"]);
+  assert.deepEqual(nodes.filter((node) => !ids.has(node.id)), [original[3]]);
+  assert.deepEqual(nodes, original);
 });
 
 test("a nested folder cannot be disconnected as a root", () => {
-  expect(disconnectedIds([
+  assert.equal(disconnectedIds([
     { id: "child", parentId: "root", name: "Album", kind: "folder", status: "saved" },
-  ], "child").size).toBe(0);
+  ], "child").size, 0);
 });

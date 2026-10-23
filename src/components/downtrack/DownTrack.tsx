@@ -218,6 +218,7 @@ export function DownTrack() {
   // Restore saved root folders on startup.
   const [rootsLoaded, setRootsLoaded] = useState(false);
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const saved = JSON.parse(localStorage.getItem(ROOTS_KEY) ?? "[]") as { name: string; path?: string }[];
@@ -226,10 +227,11 @@ export function DownTrack() {
           if (r.path && isTauri()) all.push(...(await loadRoot(r.name, { path: r.path })).created);
           else all.push({ id: uid(), parentId: null, name: r.name, kind: "folder", status: "saved" });
         }
-        if (all.length) setNodes((ns) => [...all, ...ns]);
+        if (!cancelled && all.length) setNodes((ns) => [...all, ...ns]);
       } catch { /* ignore */ }
-      setRootsLoaded(true);
+      if (!cancelled) setRootsLoaded(true);
     })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
