@@ -137,3 +137,7 @@ export async function windowAction(a: "minimize" | "maximize" | "close") {
   else if (a === "maximize") await w.toggleMaximize();
   else await w.close();
 }
+
+export async function setCookiesFile(path?: string): Promise<void> {
+  if (isTauri()) await invoke("set_cookies_file", { path: path ?? null });
+}
