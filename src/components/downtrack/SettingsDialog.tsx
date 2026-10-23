@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { engineVersion, isTauri, updateEngine } from "@/lib/native";
-import { Moon, Sun, Monitor, RefreshCw, Check, Terminal } from "lucide-react";
+import { engineVersion, isTauri, setCookiesFile, updateEngine } from "@/lib/native";
+import { Moon, Sun, Monitor, RefreshCw, Check, Terminal, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { AUDIO_Q, VIDEO_Q, type AudioQ, type Format, type VideoQ } from "./data"
 import { cn } from "@/lib/utils";
 
 export type Theme = "dark" | "light" | "system";
-export interface Settings { theme: Theme; format: Format; audio: AudioQ; video: VideoQ; lang: Lang }
+export interface Settings { theme: Theme; format: Format; audio: AudioQ; video: VideoQ; lang: Lang; cookiesFile?: string }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -34,11 +34,47 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
   );
 }
 
+const COOKIE_TEXT = {
+  he: { label: "קובץ עוגיות YouTube", choose: "בחר קובץ", remove: "הסר", none: "לא נבחר" },
+  en: { label: "YouTube cookies file", choose: "Choose file", remove: "Remove", none: "Not selected" },
+};
+
+function CookiesRow({ s, set }: { s: Settings; set: (p: Partial<Settings>) => void }) {
+  const tx = s.lang === "he" ? COOKIE_TEXT.he : COOKIE_TEXT.en;
+
+  const pick = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const path = await open({ multiple: false, filters: [{ name: "cookies", extensions: ["txt"] }] });
+    if (typeof path === "string") set({ cookiesFile: path });
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{tx.label}</div>
+        <div className="truncate text-xs text-muted-foreground" dir="ltr">
+          {s.cookiesFile ? s.cookiesFile.split(/[\\/]/).pop() : tx.none}
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Button size="sm" variant="outline" onClick={pick}><FileText className="size-3.5" />{tx.choose}</Button>
+        {s.cookiesFile && (
+          <Button size="sm" variant="ghost" onClick={() => set({ cookiesFile: undefined })} aria-label={tx.remove}>
+            <X className="size-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsDialog({ open, onOpenChange, t, s, set }: { open: boolean; onOpenChange: (o: boolean) => void; t: Dict; s: Settings; set: (p: Partial<Settings>) => void }) {
   const [busy, setBusy] = useState(false);
   const [ver, setVer] = useState("2026.09.14");
 
   useEffect(() => { if (open) engineVersion().then((v) => v && setVer(v)).catch(() => {}); }, [open]);
+
+  useEffect(() => { setCookiesFile(s.cookiesFile).catch(() => {}); }, [s.cookiesFile]);
 
   const update = () => {
     setBusy(true);
@@ -80,6 +116,7 @@ export function SettingsDialog({ open, onOpenChange, t, s, set }: { open: boolea
               <SelectContent className="max-h-72">{LANGUAGES.map((l) => <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>)}</SelectContent>
             </Select>
           </Row>
+          <CookiesRow s={s} set={set} />
           <div className="rounded-lg border border-border bg-card px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
